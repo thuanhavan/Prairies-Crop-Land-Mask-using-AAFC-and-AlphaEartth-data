@@ -1,75 +1,32 @@
-
-var water = ee.FeatureCollection('projects/ee-aafc-annimation/assets/saskatchewan_water')
-var styling = {color: 'Blue', fillColor: 'Blue', width:1};
-Map.addLayer(water.style(styling),{'opacity': 1}, 'water',false)
-
-
-// Manicipality
-var municipality = ee.FeatureCollection('projects/ee-download-canada/assets/municipality_ABSK')
-Map.setOptions('satellite')
-
-
-var assetList = ee.data.listAssets('projects/kochias2/assets/CropMask_embedding')['assets']
-                    .map(function(d) { return d.name });
-var img_list = assetList.map(function(f) { return ee.Image(f) })
-var img = ee.ImageCollection.fromImages(img_list).mosaic().focalMedian(2)
-          .clip(municipality)
-var img_crop = img//.updateMask(img.gt(1))
-// print(img)
-// Map.addLayer(img_crop, {min:0, max:3, palette:['blue','orange']},'cropland',false)
-Map.addLayer(img_crop, imageVisParam,'cropland',false)
+//======== DISPLAY CROPMASK ==========//
+// 1. List your three “CropMask” folders
+var folders = ['projects/cropmask-alphearth/assets/CropMask'];
+// 2. Apply it to every folder, then make one union‐mosaic
+var perFolder = folders.map(loadMosaicFromFolder);
+var allMasks = ee.ImageCollection.fromImages(perFolder).mosaic().rename('b1');
+// 3. Display
+Map.addLayer(allMasks, {"opacity":1,"bands":["b1"],"min":0.4,"max":1,"palette":["ebff14","30a73d"]}, 'All CropMasks');
 
 
-
-var field_boudarny = ee.FeatureCollection('projects/fieldboundary2025/assets/SK_boundary_merge')
-var styling = {color: 'white', fillColor: '00000000', width:1};
-Map.addLayer(field_boudarny.style(styling),{'opacity': 1}, 'field_boudarny',false)
-
-
-
+//======== DISPLAY CROPLAND BOUNDARY ==========//
+var prairies = ee.FeatureCollection('projects/ee-realfieldca/assets/Prairies_ROI')
 var styling = {color: 'red', fillColor: '00000000', width:2};
-Map.addLayer(municipality.style(styling),{'opacity': 1}, 'municipality')
+Map.addLayer(prairies.style(styling),{'opacity': 1}, 'field boundary')
 
 
-
-
-// long-term s2 collection
-var roi = geometry
-Map.centerObject(geometry,13)
-var fieldboundary = field_boudarny.filterBounds(roi)
-var module = require('users/Ha/module:s2_collection_harmonic_duck')
-var collection = module.s2_collection(roi,2019,2025)
-// // print(collection)
-
-
-// ndvi harmonic
-var module = require('users/Ha/module:s2l8_harmonic_duck')
-var ndviFit = module.s2l8_harmonic(roi,collection)
-var ndviFit = ndviFit.unitScale(0.0,0.6) 
-// Map.addLayer(ndviFit,{},'ndviFit')
-
-
-
-// single year ndvi
-var module = require('users/Ha/module:s2_ndvi_1year')
-var years = ee.List.sequence(2019,2022)
-var ndvi_yearly = years.map(function(i){
-  var year = ee.Number(i)
-  var name = ee.String('ndvi')//.cat(ee.String(year.toInt())) # output same band name
-  // var name = ee.String('ndvi_').cat(ee.String(year.toInt())) #output with year
-  var ndvi_1y = module.s2_ndvi_1year(roi,fieldboundary,year)
-  var  ndvi_avg = ndviFit.multiply(5).add(ndvi_1y.select('ndvi_stdization').multiply(3)).unitScale(2.5,5.5)
-  return ndvi_avg.rename(name)
-})
-// print(ndvi_yearly)
-// Display image
-var ndvi_yearly = ee.ImageCollection(ndvi_yearly)//.toBands().rename('ndvi_2019','ndvi_2020','ndvi_2021','ndvi_2022')
-var palette = ["0529d8","d73027","f46d43","fdae61","fee08b","d9ef8b","a6d96a","66bd63","1a9850","006837"];
-// Map.addLayer(ndvi_yearly.select('ndvi_2022'),{min:0.1,max:0.8,palette:palette},'harmonic')
-// Map.addLayer(ndvi_yearly.sum(),{min:0,max:7,palette:palette},'harmonic')
-
-
-var ndvi_median = ee.ImageCollection(ndvi_yearly).median()//.rename('ndvi_median')
-// Map.addLayer(ndvi_median.updateMask(img_crop.gt(2)),{min:0.1,max:0.8,palette:palette},'harmonic')
-Map.addLayer(ndvi_median,{},'harmonic')
-
+//======== FUNCTIONS ==========//
+// A small helper: list, load & mask every IMAGE in a folder, then mosaic
+function loadMosaicFromFolder(folderId) {
+  // get metadata for everything under the folder
+  var assets = ee.data.listAssets(folderId).assets;
+  // pull only the IMAGE IDs
+  var imageIds = assets.filter(function(a){ return a.type === 'IMAGE'; }).map(function(a){ return a.id; });
+  // load each one, mask out zeros, collect into a collection
+  var col = ee.ImageCollection(imageIds.map(function(id) {
+      var img = ee.Image(id);
+      return img.updateMask(img.neq(0));
+    })
+  );
+  // return the mosaic of that collection
+  return col.mosaic()
+}
