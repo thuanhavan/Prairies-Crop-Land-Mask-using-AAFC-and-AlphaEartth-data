@@ -1,5 +1,5 @@
-# Prairies-Crop-Land-Mask-using-AAFC-and-AlphaEartth-data
-A workflow to refine crop mask for the Prairies cropland
+# Prairies-Crop-Land-Mask
+A workflow to refine crop mask for the Prairies cropland using-AAFC-and-AlphaEartth-data
 
 📄 Overview
 
